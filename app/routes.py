@@ -1,11 +1,10 @@
 from app import app
 from flask import request
-import wget
 import subprocess
 import json
 import app.osm_to_adj as osm_to_adj
+import app.map_update as map_update
 import os
-from datetime import *
 import shutil
 import sys
 import resource
@@ -24,7 +23,6 @@ maxMapFolderSize = None  #change first value to set number of gigabits the map f
 LRU = []
 
 default = '--keep=\"highway=motorway =trunk =primary =secondary =tertiary =unclassified =primary_link =secondary_link =tertiary_link =trunk_link =motorway_link\" --drop-version'
-map_convert_command = '--keep=\"highway=motorway =trunk =primary =secondary =tertiary =unclassified =residential =primary_link =secondary_link =tertiary_link =trunk_link =living_street =motorway_link =path =footway =cycleway \" --drop-version'
 motorway = '=motorway =motorway_link'
 trunk = ' =trunk =trunk_link'
 primary = ' =primary =primary_link'
@@ -49,8 +47,25 @@ def harden_response(message_str):
     response.headers['X-Frame-Options'] = 'SAMEORIGIN'
     return response
 
+def sanitize_location_name(name: str):
+    new_name = str(name)
+    new_name = new_name.lower().replace(",", "").replace(" ", "").replace(".","").replace("-","").replace("(","").replace(")","").replace("'","")
+    return new_name
+
 @app.route('/amenity')
 def amenity():
+    '''
+    Query Parameter:
+    where:
+    -minLat: a float
+    -minLon: a float
+    -maxLat: a float
+    -maxLon: a float
+    -location: a string that contains a city name as returned as part of /cities
+
+    what:
+    -amenity: a type of amenity
+    '''
     try:
         try:
             if((request.args['minLat'] is not None) and (request.args['minLon'] is not None) and (request.args['maxLat'] is not None) and (request.args['maxLon'] is not None) and (request.args['amenity'] is not None)):    
@@ -64,7 +79,7 @@ def amenity():
         
         try:
             if((request.args['location'] is not None) and (request.args['amenity'] is not None)):
-                input_Value = city_coords(request.args['location'].lower().replace(",", "").replace(" ", ""))
+                input_Value = city_coords(sanitize_location_name(request.args['location']))
                 amenity_type = request.args['amenity']
                 app_log.info(divider)
                 app_log.info(f"Requester: {request.remote_addr}")
@@ -93,7 +108,7 @@ def amenity():
 
 
 
-    o5m = call_convert1("app/map_files/amenity-north-america-latest.osm.pbf", input_Value)
+    o5m = call_convert1(map_update.amenityfile(), input_Value)
     filename = callAmenityFilter(o5m, amenity_type)
 
 
@@ -198,8 +213,19 @@ def amenity():
 
 @app.route('/loc')
 def namedInput():
+    '''
+    Query Param:
+    Where:
+    -minLon: a float
+    -maxLon: a float
+    -minLat: a float
+    -maxLat: a float
+    -location: A string mapping to a city as returned by /cities
+    What:
+    -level:
+    '''
     try:
-        input_Value = request.args['location'].lower().replace(",", "").replace(" ", "")
+        input_Value = sanitize_location_name(request.args['location'])
         app_log.info(divider)
         app_log.info(f"Requester: {request.remote_addr}")
         app_log.info(f"Script started with {request.args['location']} parameters")
@@ -274,7 +300,7 @@ def map_request():
     if ((minLat != None) and (minLon != None) and (maxLat != None) and (maxLon != None)):
         bbox = [round(float(minLat), degreeRound), round(float(minLon), degreeRound), round(float(maxLat), degreeRound), round(float(maxLon), degreeRound)]
     elif (city != None):
-        city = city.lower().replace(",", "").replace(" ", "")
+        city = sanitize_location_name(city)
         bbox = city_coords(city)
     else:
          return harden_response("Invalid arguments")
@@ -296,7 +322,7 @@ def hashreturn():
     level = request.args.get('level')
     if (level != None):
         try:
-            loc = str(request.args['location']).lower().replace(",", "").replace(" ", "")
+            loc = sanitize_location_name(request.args['location'])
             input_Value = city_coords(loc)
             type = "loc"
             app_log.info(divider)
@@ -330,7 +356,7 @@ def hashreturn():
             if (city == None):
                 input_Value = [round(float(request.args['minLat']), degreeRound), round(float(request.args['minLon']), degreeRound), round(float(request.args['maxLat']), degreeRound), round(float(request.args['maxLon']), degreeRound)]
             else:
-                input_Value = city_coords(request.args['location'].lower().replace(",", "").replace(" ", ""))
+                input_Value = city_coords(sanitize_location_name(request.args['location']))
             dir = f"app/reduced_maps/coords/{input_Value[0]}/{input_Value[1]}/{input_Value[2]}/{input_Value[3]}/{amenity}"
         except:
             return harden_response(page_not_found)
@@ -524,24 +550,6 @@ def callAmenityFilter(o5m_filename, filter):
 
     return f"app/temp2.xml"
 
-def download_map(url):
-    """Uses wget to attempt downloading a map url
-
-    Parameters:
-    url(str): String of the URL that the map download is located at
-
-    Returns:
-    string: String of the directory location of the map downloaded
-
-    """
-    try:
-        filename = wget.download(url, out="app/map_files/download")
-        print("Map Download Complete")
-    except:
-        print("Error downloading map")
-        app_log.exception("Exception occurred while downloading map")
-        return
-    return filename
 
 def get_memory():
     '''Retreives current amount of free memory
@@ -558,107 +566,8 @@ def get_memory():
                 free_memory += int(sline[1])
     return free_memory
 
-def update():
-    '''Updates and reduces the root map file'''
-
-    filter_command = '--keep=\"amenity= or aeroway=\" --drop-version --ignore-dependencies'
-
-    try:
-        with open("app/update.json", "r") as f:
-            print("Updating maps...")
-            app_log.info(f"{divider}")
-            app_log.info(f"Updating map...")
-            loaded = json.load(f)
-            if not os.path.isdir("app/map_files/download"):
-                os.mkdir("app/map_files/download")
-            
-            for sub in loaded["maps"]:
-                d = datetime.today()
-                #if (d.weekday() == 1 and int(d.strftime("%d")) < 7 and int(d.strftime("%h")) > 1 and int(d.strftime("%h")) < 3):
-                try:
-                    map_title = sub["map"]
-
-                    print(f"Downloading {map_title} map...")
-                    download_map(sub["url"])
-                    sub["last-updated"] = date.today().strftime("%Y%m%d")
-
-                except:
-                    print("Error Downloading Map")
-                    app_log.exception(f"Exception occured while downloading map {map_title}")
-                    break
-
-                with open("app/update.json", 'w') as f:
-                    json.dump(loaded, f, indent=4)
-
-                #filters out info before saving
-                try:
-                    print("Converting maps... (step 1/5)")
-                    app_log.info("Converting maps... (step 1/5)")
-                    file_name = sub["file_name"]
-                    command  = (f"./app/osm_converts/osmconvert64 app/map_files/download/{file_name} -o=app/o5m_main.o5m")
-                    subprocess.run([command], shell=True)
 
 
-                    print("Filtering amenity maps... (step 2/5)")
-                    app_log.info("Filtering amenity maps... (step 2/5)")
-                    command = f"./app/osm_converts/osmfilter app/o5m_main.o5m " + filter_command + f" -o=app/filteredTemp.o5m"
-                    subprocess.run([command], shell=True)
-
-                    print("Filtering main maps... (step 3/5)")
-                    app_log.info("Filtering main maps... (step 3/5)")
-                    command = f"./app/osm_converts/osmfilter app/o5m_main.o5m " + map_convert_command + f" -o=app/mainTemp.o5m"
-                    subprocess.run([command], shell=True)
-
-                    print("Converting main maps... (step 4/5)")
-                    app_log.info("Converting main maps... (step 4/5)")
-                    os.mkdir("app/map_files/download/temp")
-                    os.rename("app/map_files/download/" + sub["file_name"], "app/map_files/download/temp/" + sub["file_name"])
-                    command  = (f"./app/osm_converts/osmconvert64 app/mainTemp.o5m -o=app/map_files/download/{file_name}")
-                    subprocess.run([command], shell=True)
-
-                    print("Converting amenity maps... (step 5/5)")
-                    app_log.info("Converting amenity maps... (step 5/5)")
-                    command  = (f"./app/osm_converts/osmconvert64 app/filteredTemp.o5m -o=app/map_files/download/amenity-{file_name}")
-                    subprocess.run([command], shell=True)
-
-
-                    os.remove("app/o5m_main.o5m")
-                    os.remove("app/mainTemp.o5m")
-                    os.remove("app/filteredTemp.o5m")
-                    print("Map convertion done.")
-                except:
-                    app_log.exception("Converting and filtering error")
-
-
-                if (os.path.isfile("app/map_files/" + sub["file_name"])):
-                    os.remove("app/map_files/" + sub["file_name"])
-                os.rename("app/map_files/download/" + sub["file_name"], "app/map_files/" + sub["file_name"])
-                os.rename("app/map_files/download/amenity-" + sub["file_name"], "app/map_files/amenity-" + sub["file_name"])
-
-            shutil.rmtree("app/map_files/download")
-
-            #Clears the saved coordinate maps on update call
-            if os.path.isdir("app/reduced_maps/coords"):
-                shutil.rmtree("app/reduced_maps/coords")
-
-            if os.path.isdir("app/reduced_maps/cities"):
-                shutil.rmtree("app/reduced_maps/cities")
-
-            os.mkdir("app/reduced_maps/coords")
-            os.mkdir("app/reduced_maps/cities")
-
-            os.remove("lru.txt")
-
-            f = open("app/reduced_maps/coords/.gitkeep", 'w')
-            f.close()
-            f = open("app/reduced_maps/cities/.gitkeep", 'w')
-            f.close()
-
-
-
-            print("Maps are up-to-date")
-    except Exception as e:
-        app_log.exception(e)
 
 def city_coords(location):
     ''' Calculates the bounding box for a given city
@@ -674,7 +583,7 @@ def city_coords(location):
         with open('app/cities.json', 'r') as x:
             loaded = json.load(x)
             for city in loaded:
-                cityState = (city['city'] + city['state']).replace(" ", "")
+                cityState = sanitize_location_name(city['city'] + city['state'])
                 if (cityState.lower() == location):
                         minLat = round(float(city['latitude']) - .1, degreeRound)
                         minLon = round(float(city['longitude']) - .1, degreeRound)
@@ -806,7 +715,7 @@ def pipeline(location, level, cityName = None):
         string: json data of the map requested with filters and sizing completed
     '''
 
-    filename = "app/map_files/north-america-latest.osm.pbf" # NA map file directory
+    filename = map_update.mapfile()
 
 
     #Checks input for name or list
@@ -913,7 +822,7 @@ def pipeline(location, level, cityName = None):
 
 def updated_pipeline(bbox, level):
     map_dir = f"app/reduced_maps/{bbox[0]}/{bbox[1]}/{bbox[2]}/{bbox[3]}/{level}"
-    filename = "app/map_files/north-america-latest.osm.pbf" # NA map file directory
+    filename = map_update.mapfile()
 
     # Checks if map is already generated
     if (os.path.isfile(f"{map_dir}/map_data.json")):
@@ -989,31 +898,15 @@ def updated_pipeline(bbox, level):
     response = json.dumps(test2, sort_keys = False, indent = 2)
     return response
 
-# checks whether the map file is there, trigger immediate upadte otherwise
-def check_for_emergency_map_update():
-    filename = "app/map_files/north-america-latest.osm.pbf" # NA map file directory
-    amenityFilename = "app/map_files/amenity-north-america-latest.osm.pbf" # NA map file directory
 
-    if (not os.path.isfile(filename)) and (not os.path.isfile(amenityFilename)):
-        print("Map file not found. Emergency map update!")
-        update()
-
-@app.cli.command('wipe')
+@app.cli.command('wipe', help='Wipe the cache (but not the maps)')
 def wipe_cache():
-    try: 
-        shutil.rmtree('app/reduced_maps')
-        os.remove('lru.txt')
-        os.mkdir('app/reduced_maps')
-        os.mkdir('app/reduced_maps/cities')
-        os.mkdir('app/reduced_maps/coords')
-    except:
-        pass
+    map_update.flush_map_cache()
 
-@app.cli.command('update') #TODO
+@app.cli.command('update', help='Force the update of the maps (and flush the cache)') 
 def redownload_primary_maps():
     try:
-        shutil.rmtree('app/map_files')
-        os.mkdir('app/map_files')
+        map_update.force_map_update()
     except:
         pass
 
@@ -1022,7 +915,7 @@ sched = BackgroundScheduler()
 sched.daemonic = True
 sched.start()
 
-sched.add_job(update, 'cron', day='1st tue', hour='2', misfire_grace_time=None)
+sched.add_job(map_update.update, 'cron', day='1st tue', hour='2', misfire_grace_time=None)
 
 sched.print_jobs()
 
@@ -1040,6 +933,8 @@ app_log = logging.getLogger('root')
 app_log.setLevel(logging.DEBUG)
 
 app_log.addHandler(my_handler)
+
+map_update.init(app_log)
 
 try:
     with open("lru.txt", "rb") as fp:
@@ -1061,4 +956,4 @@ memPercent = os.getenv('MEMORY_LIMIT')
 if memPercent is None:
     memPercent = .85
 
-check_for_emergency_map_update()
+map_update.check_for_emergency_map_update()

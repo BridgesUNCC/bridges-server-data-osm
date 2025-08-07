@@ -4,7 +4,23 @@
             "map": "North America",
             "file_name": "north-america-latest.osm.pbf",
             "url": "http://download.geofabrik.de/north-america-latest.osm.pbf",
-            "last-updated": "20200626"
+            "last-updated": "20240101"
+        }
+    ],
+    "fakemaps3": [
+        {
+            "map": "Mexico",
+            "file_name": "mexico-latest.osm.pbf",
+            "url": "https://download.geofabrik.de/north-america/mexico-latest.osm.pbf",
+            "last-updated": "20240101"
+        }
+    ],
+    "fakemaps": [
+        {
+            "map": "Albania",
+            "file_name": "albania-latest.osm.pbf",
+            "url": "https://download.geofabrik.de/europe/albania-latest.osm.pbf",
+            "last-updated": "20241224"
         }
     ]
 }

@@ -2,49 +2,28 @@
 Repository for the backend processing and handling of OSM data requests for the BRIDGES project
 
 ## Setup
-This is a UNIX based server and can only run on such systems due to UNIX only dependencies.
-If running on Centos 7 execute the python_setup.sh file.
-```bash
-sudo ./python_setup
-```
-This file holds all the commands to download the required python version and python repositories
+Create a python 3.8 virtual environment. It works also with a 3.6
+environment. But likely not a 3.10 environment and further. And reset
+the pip packages in the environment from `requirements.txt`.
 
-If you are running a different version of linux run these commands to download Python 3.6
 ```bash
-sudo add-apt-repository ppa:jonathonf/python-3.6
-sudo apt-get update
-sudo apt-get install python3.6
-sudo apt-get install python3.6-pip
-sudo apt install python3.6-dev
-```
-To download the required python libraries run the following commands
-```bash
-sudo python3.6 -m pip install flask
-sudo python3.6 -m pip install wget
-sudo python3.6 -m pip install apscheduler
-sudo python3.6 -m pip install virtualenv
+$ /opt/python-3.8.10/bin/python3 -m venv myvenv
+$ . ./myvenv/bin/activate
+$ pip install -r requirements.txt
 ```
 
 ## Launching Flask Server
-(Optional)
-The first step is to create a python virtual environment within your project the project folder
-```bash
-python3.6 -m venv venv
-```
-(Optional)
-After creating the python virtual environment run this line to launch the virtual environment
-```bash
-source venv/bin/activate
-```
+
+(Assuming you have activated the environment first. )
 
 Step 1: To launch the flask server first compile the web server
 ```bash
-export FLASK_APP=run.py
+$ export FLASK_APP=run.py
 ```
 
 Step 2: Launch the web server 
 ```bash
-flask run --host=0.0.0.0 --port=8080
+$ flask run --host=0.0.0.0 --port=8080
 ```
 --host signifies that the server should use its default IP when listening for requests
 
@@ -222,3 +201,19 @@ ______________________________
 - 35.0809, -80.9700, 35.3457, -80.6693, "food"
 - 33.6906, -111.6869, 33.3213, -112.2718, "school"
 
+
+# How big is the data?
+
+(stats in Dec 2024)
+
+The download of the .pbf file is 16 GB (download is about 30 minutes)
+
+The extracted o5m_main.o5m file is 35GB (and takes not quite an hour on the VM)
+
+The intermediate amenity file filteredTemp.o5m is 268MB (take about 85min)
+
+The intermediate map file mainTemp.o5m is over 4.6GB (and takes over 4 hours; note that generating this file is generated in burst)
+
+the final amenity file is about 130MB
+
+the final map file is about 1.5GB
