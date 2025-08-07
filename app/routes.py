@@ -122,6 +122,7 @@ def amenity():
             continue
         amenity = None
         aero = None
+        name = None
         faa = None
         iata = None
         icao = None
