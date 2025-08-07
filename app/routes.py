@@ -514,7 +514,8 @@ def callAmenityFilter(o5m_filename, filter):
 
     try:
         start_time = time.time()
-        app_log.info(f"Starting amenity filter on {o5m_filename} with filter {filter}")
+        app_log.info(f"Starting amenity filter on {o5m_filename} with filter {filter} using command: {command}")
+        
         subprocess.run([command], shell=True)
         app_log.info("Filtering Complete in: %s" % (time.time() - start_time))
     except:
