@@ -9,7 +9,7 @@ import shutil
 import sys
 import resource
 import logging
-from logging.handlers import RotatingFileHandler
+from logging.handlers import RotatingFileHandler, StreamHandler
 import time
 import hashlib
 import pickle
@@ -925,8 +925,9 @@ sched.print_jobs()
 
 format = logging.Formatter('%(asctime)s %(message)s')
 logFile = 'log.log'
-my_handler = RotatingFileHandler(logFile, mode='a', maxBytes=5*1024*1024,
-                                 backupCount=2, encoding=None, delay=0)
+#my_handler = RotatingFileHandler(logFile, mode='a', maxBytes=5*1024*1024,
+#                                 backupCount=2, encoding=None, delay=0)
+my_handler = StreamHandler()
 my_handler.setFormatter(format)
 my_handler.setLevel(logging.INFO)
 
