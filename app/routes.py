@@ -9,7 +9,8 @@ import shutil
 import sys
 import resource
 import logging
-from logging.handlers import RotatingFileHandler, StreamHandler
+from logging.handlers import RotatingFileHandler
+from logging import StreamHandler
 import time
 import hashlib
 import pickle
